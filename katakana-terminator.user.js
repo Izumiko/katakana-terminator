@@ -474,7 +474,7 @@ const translateWithGoogle = async (phrases) => {
  */
 const translateWithGemini = async (phrases) => {
     // Split phrases into smaller chunks to avoid API limits
-    const maxPhrasesPerRequest = 50;
+    const maxPhrasesPerRequest = 100;
     const chunks = [];
 
     for (let i = 0; i < phrases.length; i += maxPhrasesPerRequest) {
@@ -505,7 +505,7 @@ const translateWithGemini = async (phrases) => {
 const processGeminiChunk = async (phrases) => {
     // Build prompt
     const prompt = `
-Please restore the following Japanese katakana terms into their original language words (no explanations). Return only the corresponding original word and language code for each katakana, one per line:
+Please restore the following Japanese katakana terms into their original language words (no explanations). Return only the corresponding original word and language code for each katakana, one per line (response should not contain katakana terms):
 
 ${phrases.join('\n')}
 
