@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name        Katakana Terminator
+// @name        Katakana Terminator (AI)
 // @description Convert gairaigo (Japanese loan words) back to English
 // @author      Arnie97
 // @license     MIT
@@ -13,28 +13,32 @@
 // @grant       GM.xmlHttpRequest
 // @grant       GM_xmlhttpRequest
 // @grant       GM_addStyle
-// @grant       GM.getValue
-// @grant       GM.setValue
-// @grant       GM_getValue
-// @grant       GM_setValue
-// @connect     translate.google.cn
 // @connect     translate.google.com
 // @connect     translate.googleapis.com
 // @connect     generativelanguage.googleapis.com
-// @version     2025.04.22
-// @name:ja-JP  カタカナターミネーター
-// @name:zh-CN  片假名终结者
+// @version     2025.04.27
+// @name:ja-JP  カタカナターミネーター(AI)
+// @name:zh-CN  片假名终结者(AI)
 // @description:zh-CN 在网页中的日语外来语上方标注英文原词
 // ==/UserScript==
 
 'use strict';
 
+// User settings
+const userSettings = {
+    apiService: 'google', // google, gemini. Default to Google Translate
+    geminiApiKey: '',     // Gemini API key
+    geminiApiEndpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', // Gemini API endpoint
+    geminiModel: 'gemini-2.0-flash-lite',
+    temperature: 0.2,     // Gemini temperature parameter
+};
+
 // Use document instead of shorthand for better readability
 const doc = document;
 
 // Use Maps instead of objects for key-value storage
-const queue = new Map();  // Map<string, HTMLElement[]> - {"カタカナ": [rtNodeA, rtNodeB]}
-const cachedTranslations = new Map();  // Map<string, string> - {"ターミネーター": "Terminator"}
+const queue = new Map(); // Map<string, HTMLElement[]> - {"カタカナ": [rtNodeA, rtNodeB]}
+const cachedTranslations = new Map(); // Map<string, string> - {"ターミネーター": "Terminator"}
 const newNodes = [doc.body];
 
 // State variables
@@ -46,216 +50,6 @@ const katakanaRegex = /[\u30A1-\u30FA\u30FD-\u30FF][\u3099\u309A\u30A1-\u30FF]*[
 
 // Tags to exclude
 const excludeTags = new Set(['ruby', 'script', 'select', 'textarea']);
-
-// User settings
-let userSettings = {
-    apiService: 'google', // Default to Google Translate
-    geminiApiKey: '',     // Gemini API key
-    geminiApiEndpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', // Gemini API endpoint
-    geminiModel: 'gemini-2.0-flash-lite',
-    temperature: 0.2,     // Gemini temperature parameter
-};
-
-/**
- * Initialize user settings using async/await
- */
-const initSettings = async () => {
-    try {
-        // Use appropriate API depending on what's available
-        let value;
-        if (typeof GM.getValue === 'function') {
-            value = await GM.getValue('katakanaTerminatorSettings', null);
-        } else if (typeof GM_getValue === 'function') {
-            value = GM_getValue('katakanaTerminatorSettings', null);
-        }
-
-        if (value) {
-            userSettings = JSON.parse(value);
-        }
-
-        // Add settings UI
-        addSettingsUI();
-    } catch (error) {
-        console.error('Katakana Terminator: Error loading settings', error);
-    }
-};
-
-/**
- * Save user settings using async/await
- */
-const saveSettings = async () => {
-    try {
-        const settingsString = JSON.stringify(userSettings);
-
-        // Use appropriate API depending on what's available
-        if (typeof GM.setValue === 'function') {
-            await GM.setValue('katakanaTerminatorSettings', settingsString);
-        } else if (typeof GM_setValue === 'function') {
-            GM_setValue('katakanaTerminatorSettings', settingsString);
-        }
-    } catch (error) {
-        console.error('Katakana Terminator: Error saving settings', error);
-    }
-};
-
-/**
- * Add settings UI
- */
-const addSettingsUI = () => {
-    // Create settings button
-    const settingsBtn = doc.createElement('div');
-    settingsBtn.innerHTML = '⚙️';
-    settingsBtn.title = 'Katakana Terminator Settings';
-    settingsBtn.style.cssText = `
-        position: fixed;
-        bottom: 16px;
-        right: 16px;
-        width: 32px;
-        height: 32px;
-        background: #ffffff;
-        border: 1px solid #cccccc;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        z-index: 9999;
-        font-size: 16px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        opacity: 0.4;
-    `;
-
-    // Click button to show settings panel
-    settingsBtn.addEventListener('click', showSettingsPanel);
-
-    // Add to document
-    doc.body.appendChild(settingsBtn);
-};
-
-/**
- * Show settings panel
- */
-const showSettingsPanel = () => {
-    // Create modal dialog
-    const modal = doc.createElement('div');
-    modal.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10000;
-    `;
-
-    // Create settings panel
-    const panel = doc.createElement('div');
-    panel.style.cssText = `
-        background: #ffffff;
-        border-radius: 8px;
-        padding: 20px;
-        width: 400px;
-        max-width: 90%;
-        max-height: 90%;
-        overflow-y: auto;
-    `;
-
-    // Settings panel title
-    panel.innerHTML = `<h2 style="margin-top:0">Katakana Terminator Settings</h2>`;
-
-    // Create form
-    const form = doc.createElement('form');
-    form.innerHTML = `
-        <div style="margin-bottom:15px">
-            <label style="display:block;margin-bottom:5px">Translation Service:</label>
-            <select id="kt-api-service" style="width:100%;padding:5px">
-                <option value="google" ${userSettings.apiService === 'google' ? 'selected' : ''}>Google Translate</option>
-                <option value="gemini" ${userSettings.apiService === 'gemini' ? 'selected' : ''}>Gemini Flash 2.0 Lite</option>
-            </select>
-        </div>
-
-        <div id="gemini-settings" style="display:${userSettings.apiService === 'gemini' ? 'block' : 'none'}">
-            <div style="margin-bottom:15px">
-                <label style="display:block;margin-bottom:5px">API Endpoint (OpenAI-compatible):</label>
-                <input type="text" id="kt-gemini-endpoint" placeholder="https://your-api-endpoint.com/v1/chat/completions" 
-                       value="${userSettings.geminiApiEndpoint}" style="width:100%;padding:5px;box-sizing:border-box">
-            </div>
-
-            <div style="margin-bottom:15px">
-                <label style="display:block;margin-bottom:5px">Model:</label>
-                <input type="text" id="kt-gemini-model" placeholder="model name" 
-                       value="${userSettings.geminiModel}" style="width:100%;padding:5px;box-sizing:border-box">
-            </div>
-
-            <div style="margin-bottom:15px">
-                <label style="display:block;margin-bottom:5px">API Key:</label>
-                <input type="password" id="kt-gemini-key" placeholder="Enter your API key" 
-                       value="${userSettings.geminiApiKey}" style="width:100%;padding:5px;box-sizing:border-box">
-            </div>
-
-            <div style="margin-bottom:15px">
-                <label style="display:block;margin-bottom:5px">Temperature (0-1):</label>
-                <input type="range" id="kt-temperature" min="0" max="1" step="0.1" 
-                       value="${userSettings.temperature}" style="width:100%">
-                <span id="temperature-value">${userSettings.temperature}</span>
-            </div>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;margin-top:20px">
-            <button type="button" id="kt-cancel" style="padding:8px 15px">Cancel</button>
-            <button type="submit" id="kt-save" style="padding:8px 15px;background:#4CAF50;color:white;border:none;border-radius:4px">Save</button>
-        </div>
-    `;
-
-    panel.appendChild(form);
-    modal.appendChild(panel);
-    doc.body.appendChild(modal);
-
-    // Set event listeners
-    const apiServiceSelect = doc.getElementById('kt-api-service');
-    const geminiSettings = doc.getElementById('gemini-settings');
-    const temperatureInput = doc.getElementById('kt-temperature');
-    const temperatureValue = doc.getElementById('temperature-value');
-
-    // Toggle Gemini settings when API service changes
-    apiServiceSelect.addEventListener('change', () => {
-        geminiSettings.style.display = apiServiceSelect.value === 'gemini' ? 'block' : 'none';
-    });
-
-    // Update temperature display
-    temperatureInput.addEventListener('input', () => {
-        temperatureValue.textContent = temperatureInput.value;
-    });
-
-    // Cancel button
-    doc.getElementById('kt-cancel').addEventListener('click', () => {
-        doc.body.removeChild(modal);
-    });
-
-    // Save button
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        // Get setting values
-        userSettings.apiService = apiServiceSelect.value;
-        userSettings.geminiApiEndpoint = doc.getElementById('kt-gemini-endpoint').value;
-        userSettings.geminiModel = doc.getElementById('kt-gemini-model').value;
-        userSettings.geminiApiKey = doc.getElementById('kt-gemini-key').value;
-        userSettings.temperature = parseFloat(temperatureInput.value);
-
-        // Save settings
-        await saveSettings();
-
-        // Clear cached translations to use new translation service
-        cachedTranslations.clear();
-
-        // Close settings panel
-        doc.body.removeChild(modal);
-    });
-};
 
 /**
  * Recursively scan node and its descendants (depth-first search)
@@ -592,7 +386,7 @@ const googleApiList = [
     },
     {
         name: 'Google Dictionary',
-        hosts: ['translate.google.cn'],
+        hosts: ['translate.google.com'],
         path: '/translate_a/t',
         params: (phrases) => {
             const joinedText = phrases.join('\n').replace(/\s+$/, '');
@@ -708,9 +502,6 @@ let observer;
  */
 const main = async () => {
     try {
-        // Initialize settings
-        await initSettings();
-
         // Add styles
         GM_addStyle("rt.katakana-terminator-rt::before { content: attr(data-rt); }");
 
