@@ -299,17 +299,24 @@ const translateWithGemini = async (phrases) => {
 const processGeminiChunk = async (phrases) => {
     // Build prompt
     const prompt = `
-Please restore the following Japanese katakana terms into their original language words (no explanations). Return only the corresponding original word and language code for each katakana, one per line (response should not contain katakana terms):
+Please restore the following Japanese katakana terms into their original language words (no explanations).
+If the katakana is an abbreviation, return the original full word's name in its source language with the appropriate language code, not the expanded katakana.
+Return only the corresponding original word and language code for each katakana, one per line (response should not contain katakana terms):
+
+## Japanese katakana terms
 
 ${phrases.join('\n')}
 
-Example request and response format:
-Request:
+## Example request and response format:
+
+**Request:**
 ストレス
 アルバイト
-Response:
+ブルアカ
+**Response:**
 en: stress
 de: arbeit
+en: Blue Archive
 `;
 
     try {
