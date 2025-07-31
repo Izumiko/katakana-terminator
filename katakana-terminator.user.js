@@ -3,7 +3,7 @@
 // @description Convert gairaigo (Japanese loan words) back to English
 // @author      Arnie97
 // @license     MIT
-// @copyright   2017-2024, Katakana Terminator Contributors (https://github.com/Arnie97/katakana-terminator/graphs/contributors)
+// @copyright   2017-2025, Katakana Terminator Contributors (https://github.com/Arnie97/katakana-terminator/graphs/contributors)
 // @namespace   https://github.com/Izumiko
 // @homepageURL https://github.com/Izumiko/katakana-terminator
 // @supportURL  https://greasyfork.org/scripts/33268/feedback
@@ -16,7 +16,7 @@
 // @connect     translate.google.com
 // @connect     translate.googleapis.com
 // @connect     generativelanguage.googleapis.com
-// @version     2025.04.27
+// @version     2025.07.31
 // @name:ja-JP  カタカナターミネーター(AI)
 // @name:zh-CN  片假名终结者(AI)
 // @description:zh-CN 在网页中的日语外来语上方标注英文原词
@@ -29,7 +29,7 @@ const userSettings = {
     apiService: 'google', // google, gemini. Default to Google Translate
     geminiApiKey: '',     // Gemini API key
     geminiApiEndpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', // Gemini API endpoint
-    geminiModel: 'gemini-2.0-flash-lite',
+    geminiModel: 'gemini-2.5-flash-lite',
     temperature: 0.2,     // Gemini temperature parameter
 };
 
@@ -299,25 +299,48 @@ const translateWithGemini = async (phrases) => {
 const processGeminiChunk = async (phrases) => {
     // Build prompt
     const prompt = `
-Please restore the following Japanese katakana terms into their original language words (no explanations).
-If the katakana is an abbreviation, return the original full word's name in its source language with the appropriate language code, not the expanded katakana.
-Return only the corresponding original word and language code for each katakana, one per line (response should not contain katakana terms):
+Your task is to restore the following Japanese katakana terms to their original source language words or their Romaji representation.
 
-## Japanese katakana terms
+## Rules
+- For each katakana term, provide its original word or phrase from its source language.
+- If the term is a native Japanese word (e.g., onomatopoeia, emphasis), identify the language as Japanese ('ja') and output its Romaji transliteration.
+- If the term is an abbreviation, return the full original name.
+- Prepend each result with its ISO 639-1 language code followed by a colon and a space (e.g., 'en: ').
+- Return one result per line.
+- Do not include the original katakana, explanations, or any other text in your response.
 
+## Katakana Terms to Restore
 ${phrases.join('\n')}
 
-## Example request and response format:
+## Example Request and Response
 
-**Request:**
+### Request:
 ストレス
 アルバイト
 ブルアカ
-**Response:**
+パソコン
+キラキラ
+ワクチン
+
+### Response:
 en: stress
-de: arbeit
+de: Arbeit
 en: Blue Archive
+en: personal computer
+ja: kirakira
+nl: vaccin
 `;
+    const systemPrompt = `
+You are a specialized linguistic AI assistant. Your sole purpose is to analyze Japanese katakana terms, identify their etymological origins, and return the original word or phrase in its source language.
+
+Core Directives:
+- **Identify Source Language**: You must accurately determine the source language (e.g., English, German, French, etc.).
+- **Handle Native Japanese Words**: If a katakana term represents a native Japanese word (e.g., onomatopoeia, for emphasis), you must identify the language as Japanese ('ja') and provide its standard Romaji transliteration.
+- **Handle Abbreviations**: You are an expert at recognizing katakana abbreviations (e.g.,「パソコン」,「ブルアカ」) and must return the full, original term (e.g., "personal computer", "Blue Archive"), not the expanded katakana.
+- **Strict Output Format**: Your response must strictly adhere to the format '[ISO 639-1 code]: [Original Word/Phrase/Romaji]'.
+- **No Extra Information**: You must NOT provide any explanations, Japanese translations, katakana terms, or any other text outside of the requested output. Your response should be clean data.
+- **Precision**: Maintain original capitalization for proper nouns, acronyms, or language-specific rules (e.g., German nouns).
+    `;
 
     try {
         // Make API request
@@ -331,7 +354,7 @@ en: Blue Archive
             data: JSON.stringify({
                 model: userSettings.geminiModel,
                 messages: [
-                    { role: "system", content: "You are a multilingual scholar." },
+                    { role: "system", content: systemPrompt },
                     { role: "user", content: prompt }
                 ],
                 temperature: userSettings.temperature
@@ -354,9 +377,13 @@ en: Blue Archive
                     updateRubyByCachedTranslations(phrase);
                 });
             } else {
+                console.debug(prompt);
+                console.debug(content);
                 throw new Error('Gemini response does not match input count');
             }
         } else {
+            console.debug(prompt);
+            console.debug(data);
             throw new Error('Invalid Gemini response format');
         }
     } catch (error) {
