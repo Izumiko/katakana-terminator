@@ -26,11 +26,11 @@
 
 // User settings
 const userSettings = {
-    apiService: 'google', // google, gemini. Default to Google Translate
-    geminiApiKey: '',     // Gemini API key
-    geminiApiEndpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', // Gemini API endpoint
-    geminiModel: 'gemini-2.5-flash-lite',
-    temperature: 0.2,     // Gemini temperature parameter
+    apiService: 'google', // google, ai. Default to Google Translate
+    aiApiKey: '',     // AI API key
+    aiApiEndpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', // AI API endpoint
+    aiModel: 'gemini-2.5-flash-lite',
+    aiModelTemperature: 0.2,     // AI temperature parameter
 };
 
 // Use document instead of shorthand for better readability
@@ -182,10 +182,10 @@ const translate = async (phrases) => {
     });
 
     // Choose translation service based on user settings
-    if (userSettings.apiService === 'gemini' &&
-        userSettings.geminiApiEndpoint &&
-        userSettings.geminiApiKey) {
-        return translateWithGemini(phrases);
+    if (userSettings.apiService === 'ai' &&
+        userSettings.aiApiEndpoint &&
+        userSettings.aiApiKey) {
+        return translateWithAI(phrases);
     } else {
         return translateWithGoogle(phrases);
     }
@@ -262,11 +262,11 @@ const translateWithGoogle = async (phrases) => {
 };
 
 /**
- * Translate phrases with Gemini API
+ * Translate phrases with AI API
  * @param {string[]} phrases - Array of phrases to translate
  * @returns {Promise} - Promise for translation
  */
-const translateWithGemini = async (phrases) => {
+const translateWithAI = async (phrases) => {
     // Split phrases into smaller chunks to avoid API limits
     const maxPhrasesPerRequest = 100;
     const chunks = [];
@@ -277,10 +277,10 @@ const translateWithGemini = async (phrases) => {
 
     // Process each chunk with Promise.all for concurrent execution
     try {
-        await Promise.all(chunks.map(chunk => processGeminiChunk(chunk)));
+        await Promise.all(chunks.map(chunk => processAiChunk(chunk)));
         return true;
     } catch (error) {
-        console.error('Katakana Terminator: Gemini API error', error);
+        console.error('Katakana Terminator: AI API error', error);
 
         // Fall back to Google Translate
         for (const phrase of phrases) {
@@ -292,11 +292,11 @@ const translateWithGemini = async (phrases) => {
 };
 
 /**
- * Process Gemini API chunk
+ * Process AI API chunk
  * @param {string[]} phrases - Chunk of phrases
  * @returns {Promise} - Promise for processing
  */
-const processGeminiChunk = async (phrases) => {
+const processAiChunk = async (phrases) => {
     // Build prompt
     const prompt = `
 Your task is to restore the following Japanese katakana terms to their original source language words or their Romaji representation.
@@ -346,18 +346,18 @@ Core Directives:
         // Make API request
         const response = await makeRequest({
             method: "POST",
-            url: userSettings.geminiApiEndpoint,
+            url: userSettings.aiApiEndpoint,
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${userSettings.geminiApiKey}`
+                "Authorization": `Bearer ${userSettings.aiApiKey}`
             },
             data: JSON.stringify({
-                model: userSettings.geminiModel,
+                model: userSettings.aiModel,
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: prompt }
                 ],
-                temperature: userSettings.temperature
+                temperature: userSettings.aiModelTemperature
             })
         });
 
@@ -379,12 +379,12 @@ Core Directives:
             } else {
                 console.debug(prompt);
                 console.debug(content);
-                throw new Error('Gemini response does not match input count');
+                throw new Error('AI response does not match input count');
             }
         } else {
             console.debug(prompt);
             console.debug(data);
-            throw new Error('Invalid Gemini response format');
+            throw new Error('Invalid AI response format');
         }
     } catch (error) {
         throw error;
