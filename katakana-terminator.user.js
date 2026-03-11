@@ -99,20 +99,42 @@ class PersistentLRUCache {
     }
 
     /**
-     * Immediately save cache to storage
+     * Immediately save cache to storage (merge with remote data to avoid overwriting)
      */
     _flushSync() {
         if (!this.hasGMSupport) return;
 
         try {
-            // Convert Map to plain object for JSON serialization, skip in-flight nulls
-            const data = {};
+            // Read current storage data
+            const stored = GM_getValue(this.storageKey, null);
+            const merged = {};
+            
+            // Load remote data first
+            if (stored) {
+                try {
+                    const remoteData = JSON.parse(stored);
+                    Object.entries(remoteData).forEach(([key, entry]) => {
+                        if (entry.value !== null) {
+                            merged[key] = entry;
+                        }
+                    });
+                } catch (parseError) {
+                    console.error('Katakana Terminator: Failed to parse remote cache', parseError);
+                }
+            }
+            
+            // Merge local cache (newer entries overwrite older ones)
             this.cache.forEach((entry, key) => {
                 if (entry.value !== null) {
-                    data[key] = entry;
+                    const existing = merged[key];
+                    if (!existing || entry.timestamp >= existing.timestamp) {
+                        merged[key] = entry;
+                    }
                 }
             });
-            GM_setValue(this.storageKey, JSON.stringify(data));
+            
+            // Write merged data
+            GM_setValue(this.storageKey, JSON.stringify(merged));
         } catch (error) {
             console.error('Katakana Terminator: Failed to save cache to storage', error);
         }
