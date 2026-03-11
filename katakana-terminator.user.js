@@ -67,9 +67,11 @@ class PersistentLRUCache {
             const stored = GM_getValue(this.storageKey, null);
             if (stored) {
                 const data = JSON.parse(stored);
-                // Restore Map from object
+                // Restore Map from object, skip null values
                 Object.entries(data).forEach(([key, entry]) => {
-                    this.cache.set(key, entry);
+                    if (entry.value !== null) {
+                        this.cache.set(key, entry);
+                    }
                 });
                 console.debug('Katakana Terminator: Loaded', this.cache.size, 'cached translations from storage');
             }
@@ -103,10 +105,12 @@ class PersistentLRUCache {
         if (!this.hasGMSupport) return;
 
         try {
-            // Convert Map to plain object for JSON serialization
+            // Convert Map to plain object for JSON serialization, skip in-flight nulls
             const data = {};
             this.cache.forEach((entry, key) => {
-                data[key] = entry;
+                if (entry.value !== null) {
+                    data[key] = entry;
+                }
             });
             GM_setValue(this.storageKey, JSON.stringify(data));
         } catch (error) {
